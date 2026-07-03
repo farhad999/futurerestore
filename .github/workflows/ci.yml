@@ -31,6 +31,13 @@ jobs:
           image: debian:buster-slim
           options: -v ${{ github.workspace }}/..:/tmp/Builder/repos/
           run: |
+            # Hotfix for Debian Buster EOL repositories (Redirect to the official archive server)
+            sed -i s/deb.debian.org/archive.debian.org/g /etc/apt/sources.list
+            sed -i s/security.debian.org/archive.debian.org/g /etc/apt/sources.list
+            sed -i '/stretch-updates/d' /etc/apt/sources.list || true
+            sed -i '/buster-updates/d' /etc/apt/sources.list || true
+            
+            # Execute original build chain scripts
             /tmp/Builder/repos/futurerestore/.github/workflows/linux-bootstrap.sh
             /tmp/Builder/repos/futurerestore/.github/workflows/linux-build.sh
             /tmp/Builder/repos/futurerestore/.github/workflows/linux-post.sh
