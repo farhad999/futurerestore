@@ -23,6 +23,7 @@ jobs:
         with:
           submodules: 'true'
           fetch-depth: 0
+          
       - name: Linux Build
         id: Linux
         uses: addnab/docker-run-action@v3
@@ -33,51 +34,25 @@ jobs:
             /tmp/Builder/repos/futurerestore/.github/workflows/linux-bootstrap.sh
             /tmp/Builder/repos/futurerestore/.github/workflows/linux-build.sh
             /tmp/Builder/repos/futurerestore/.github/workflows/linux-post.sh
-            # Ensure workspace target directory exists outside Docker container
-            mkdir -p /tmp/Builder/repos/futurerestore/.github/workflows/
-            # Safe copy of built archives into the repo workspace before Docker closes
-            cp /tmp/Builder/repos/futurerestore/futurerestore*.tar.xz /tmp/Builder/repos/futurerestore/.github/workflows/ 2>/dev/null || true
-      - name: Linux x86_64 RELEASE Build
-        id: Linux-x86_64-RELEASE-Build
+            
+      - name: Locate and Extract Binary
+        id: extract-binary
         run: |
+          # Change ownership permissions back to host runner
           sudo chown -R $USER:$USER ${{ github.workspace }}/../
-          # Fallback check to capture generated archives if names shifted during build script execution
-          if [ -f "${{ github.workspace }}/.github/workflows/futurerestore1.tar.xz" ] && [ -f "${{ github.workspace }}/.github/workflows/name1.txt" ]; then
-            mv ${{ github.workspace }}/.github/workflows/futurerestore1.tar.xz ${{ github.workspace }}/.github/workflows/$(cat ${{ github.workspace }}/.github/workflows/name1.txt)
-          fi
-      - name: Linux x86_64 DEBUG Build
-        id: Linux-x86_64-DEBUG-Build
-        run: |
-          if [ -f "${{ github.workspace }}/.github/workflows/futurerestore2.tar.xz" ] && [ -f "${{ github.workspace }}/.github/workflows/name2.txt" ]; then
-            mv ${{ github.workspace }}/.github/workflows/futurerestore2.tar.xz ${{ github.workspace }}/.github/workflows/$(cat ${{ github.workspace }}/.github/workflows/name2.txt)
-          fi
-      - name: Linux x86_64 ASAN Build
-        id: Linux-x86_64-ASAN-Build
-        run: |
-          if [ -f "${{ github.workspace }}/.github/workflows/futurerestore3.tar.xz" ] && [ -f "${{ github.workspace }}/.github/workflows/name3.txt" ]; then
-            mv ${{ github.workspace }}/.github/workflows/futurerestore3.tar.xz ${{ github.workspace }}/.github/workflows/$(cat ${{ github.workspace }}/.github/workflows/name3.txt)
-          fi
-      - name: futurerestore Linux x86_64 RELEASE Archive
-        id: futurerestore-Linux-x86_64-RELEASE-Archive
+          
+          # Create a dedicated extraction directory
+          mkdir -p ${{ github.workspace }}/output/
+          
+          # Find the compiled binary from Docker volumes and copy it cleanly
+          find ${{ github.workspace }}/../ -name "futurerestore" -type f -exec cp {} ${{ github.workspace }}/output/ \; 2>/dev/null || true
+          
+          # Also look for any zipped archives created by the repository scripts as fallback
+          find ${{ github.workspace }}/../ -name "futurerestore*.tar.xz" -type f -exec cp {} ${{ github.workspace }}/output/ \; 2>/dev/null || true
+
+      - name: Upload Compiled FutureRestore Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: futurerestore-Linux-x86_64-RELEASE
-          path: |
-            ${{ github.workspace }}/futurerestore-Linux-x86_64*-RELEASE.tar.xz
-            ${{ github.workspace }}/.github/workflows/futurerestore-Linux-x86_64*-RELEASE.tar.xz
-      - name: futurerestore Linux x86_64 DEBUG Archive
-        id: futurerestore-Linux-x86_64-DEBUG-Archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: futurerestore-Linux-x86_64-DEBUG
-          path: |
-            ${{ github.workspace }}/futurerestore-Linux-x86_64*-DEBUG.tar.xz
-            ${{ github.workspace }}/.github/workflows/futurerestore-Linux-x86_64*-DEBUG.tar.xz
-      - name: futurerestore Linux x86_64 ASAN Archive
-        id: futurerestore-Linux-x86_64-ASAN-Archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: futurerestore-Linux-x86_64-ASAN
-          path: |
-            ${{ github.workspace }}/futurerestore-Linux-x86_64*-ASAN.tar.xz
-            ${{ github.workspace }}/.github/workflows/futurerestore-Linux-x86_64*-ASAN.tar.xz
+          name: futurerestore-Linux-x86_64
+          path: ${{ github.workspace }}/output/
+          if-no-files-found: error
