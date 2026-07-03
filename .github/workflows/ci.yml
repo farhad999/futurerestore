@@ -37,10 +37,29 @@ jobs:
             sed -i '/stretch-updates/d' /etc/apt/sources.list || true
             sed -i '/buster-updates/d' /etc/apt/sources.list || true
             
-            # Execute original build chain scripts
+            # 1. Run the bootstrap script to build all local libraries
             /tmp/Builder/repos/futurerestore/.github/workflows/linux-bootstrap.sh
-            /tmp/Builder/repos/futurerestore/.github/workflows/linux-build.sh
-            /tmp/Builder/repos/futurerestore/.github/workflows/linux-post.sh
+            
+            # 2. Re-initialize CMake manually, passing the exact paths to the compiled dependencies
+            cd /tmp/Builder/repos/futurerestore/
+            rm -rf cmake-build-release-x86_64
+            mkdir -p cmake-build-release-x86_64 && cd cmake-build-release-x86_64
+            
+            # Force CMake to prioritize our dep_root paths for headers and libraries
+            cmake .. \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_INCLUDE_PATH="/tmp/Builder/repos/futurerestore/dep_root/include" \
+              -DCMAKE_LIBRARY_PATH="/tmp/Builder/repos/futurerestore/dep_root/lib" \
+              -DPKG_CONFIG_EXECUTABLE=/usr/bin/pkg-config \
+              -DCMAKE_C_FLAGS="-I/tmp/Builder/repos/futurerestore/dep_root/include" \
+              -DCMAKE_CXX_FLAGS="-I/tmp/Builder/repos/futurerestore/dep_root/include"
+            
+            # 3. Build the binary directly using make
+            make -j$(nproc)
+            
+            # 4. Create output structures for our runner extractor script
+            mkdir -p /tmp/Builder/repos/futurerestore/.github/workflows/
+            cp futurerestore /tmp/Builder/repos/futurerestore/ 2>/dev/null || true
             
       - name: Locate and Extract Binary
         id: extract-binary
@@ -51,11 +70,8 @@ jobs:
           # Create a dedicated extraction directory
           mkdir -p ${{ github.workspace }}/output/
           
-          # Find the compiled binary from Docker volumes and copy it cleanly
+          # Find the raw compiled binary from Docker volumes and copy it cleanly
           find ${{ github.workspace }}/../ -name "futurerestore" -type f -exec cp {} ${{ github.workspace }}/output/ \; 2>/dev/null || true
-          
-          # Also look for any zipped archives created by the repository scripts as fallback
-          find ${{ github.workspace }}/../ -name "futurerestore*.tar.xz" -type f -exec cp {} ${{ github.workspace }}/output/ \; 2>/dev/null || true
 
       - name: Upload Compiled FutureRestore Artifacts
         uses: actions/upload-artifact@v4
